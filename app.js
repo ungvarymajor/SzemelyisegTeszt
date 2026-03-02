@@ -115,7 +115,7 @@ function renderStart() {
   // 2) textContent
   document.getElementById("startTitle").textContent = "Az én színem";
   document.getElementById("startSubtitle").textContent =
-    '"Személyiségteszt"';
+    '"Személyiség teszt"';
   document.getElementById("startLead").textContent =
     "Vagyis a három meghatározó komponensből (Piros-Zöld-Kék) melyik, milyen arányban jellemző rám?";
 
@@ -129,7 +129,7 @@ function renderStart() {
 
   const bullets = [
     "Legfelülre az Önre leginkább jellemző válasz kerüljön,",
-    "majd a második Önre jellemző (neutrális),",
+    "majd a második Önre jellemző (vagy semleges),",
     "végül a legkevésbé jellemző választ húzza legalulra.",
   ];
 
@@ -154,17 +154,17 @@ function renderStart() {
       const circlesData = [
         {
           colorClass: "is-green",
-          front: "inkább fókuszál az emberi és az érzelmi tényezőkre",
-          back: "Viselkedés:<br>beszédes, társaságkedvelő<br><br>Érvelés:<br>tapasztalat alapján, részletek nélkül",
+          front: "Zöld<br><br>Inkább fókuszál az emberi és az érzelmi tényezőkre -><br><br>fordítson",
+          back: "Viselkedés:<br>beszédes, társaságkedvelő<br><br>Érvelés:<br>tapasztalat alapján, meggyőződésből",
         },
         {
           colorClass: "is-red",
-          front: "a célokra és az eredményekre fókuszál inkább",
+          front: "Piros<br><br>Inkább a célokra és az eredményekre fókuszál -><br><br>fordítson",
           back: "Viselkedés:<br>domináns, dinamikus<br><br>Érvelés:<br>tapasztalat alapján, konkrétumokkal",
         },
         {
           colorClass: "is-blue",
-          front: "inkább fókuszál a tényekre és a logikus érvelésre",
+          front: "Kék<br><br>Inkább fókuszál a tényekre és a logikus érvelésre -><br><br>fordítson",
           back: "Viselkedés:<br>távolságtartó, objektív<br><br>Érvelés:<br>bizonyított tények, részletes információk",
         },
       ];
@@ -268,7 +268,7 @@ function renderQuestion() {
               </div>
 
               <div class="zone" data-zone="neutral">
-                <div class="zone-title"><span>Neutrális</span></div>
+                <div class="zone-title"><span>Semleges</span></div>
                 <div class="zone-row" id="neutralRow"><p class="drop-hint">Húzza ide a válaszát.</p></div>
               </div>
 
@@ -516,86 +516,151 @@ function renderQuestion() {
     });
   });
 
-  // --- TOUCH: fallback (touchstart / touchmove / touchend) ---
-  if (isTouchDevice()) {
-    appEl.querySelectorAll(".item").forEach((el) => (el.draggable = false));
 
-    let touchDragEl = null;
-    let offsetX = 0;
-    let offsetY = 0;
+// --- TOUCH: fallback (touchstart / touchmove / touchend) ---
+if (isTouchDevice()) {
+  appEl.querySelectorAll(".item").forEach((el) => (el.draggable = false));
 
-    const clearOver = () => dropTargets.forEach((t) => setOver(t, false));
+  let touchDragEl = null;
+  let ghostEl = null;
+  let offsetX = 0;
+  let offsetY = 0;
 
-    const onTouchStart = (e) => {
-      const el = e.currentTarget;
-      touchDragEl = el;
+  // --- AUTO-SCROLL drag közben (mobil) ---
+  let autoScrollRaf = 0;
+  let lastTouchY = 0;
 
-      const t = e.touches[0];
-      const rect = el.getBoundingClientRect();
-      offsetX = t.clientX - rect.left;
-      offsetY = t.clientY - rect.top;
+  const startAutoScroll = () => {
+    if (autoScrollRaf) return;
 
-      document.body.classList.add("dragging-touch");
-      el.classList.add("dragging");
-      el.style.position = "fixed";
-      el.style.left = `${rect.left}px`;
-      el.style.top = `${rect.top}px`;
-      el.style.width = `${rect.width}px`;
-      el.style.zIndex = "9999";
-      el.style.pointerEvents = "none";
+    const step = () => {
+      if (!touchDragEl) {
+        autoScrollRaf = 0;
+        return;
+      }
 
-      e.preventDefault();
+      const topEdge = 90;
+      const bottomEdge = window.innerHeight - 90;
+      const maxSpeed = 14;
+
+      let dy = 0;
+      if (lastTouchY < topEdge) {
+        const intensity = (topEdge - lastTouchY) / topEdge;
+        dy = -Math.ceil(maxSpeed * intensity);
+      } else if (lastTouchY > bottomEdge) {
+        const intensity = (lastTouchY - bottomEdge) / topEdge;
+        dy = Math.ceil(maxSpeed * Math.min(1, intensity));
+      }
+
+      if (dy !== 0) window.scrollBy(0, dy);
+
+      autoScrollRaf = requestAnimationFrame(step);
     };
 
-    const onTouchMove = (e) => {
-      if (!touchDragEl) return;
-      const t = e.touches[0];
+    autoScrollRaf = requestAnimationFrame(step);
+  };
 
-      touchDragEl.style.left = `${t.clientX - offsetX}px`;
-      touchDragEl.style.top = `${t.clientY - offsetY}px`;
+  const stopAutoScroll = () => {
+    if (autoScrollRaf) cancelAnimationFrame(autoScrollRaf);
+    autoScrollRaf = 0;
+  };
 
-      clearOver();
-      const under = document.elementFromPoint(t.clientX, t.clientY);
-      const zoneEl = under?.closest?.("[data-zone]");
-      if (zoneEl) setOver(zoneEl, true);
+  const clearOver = () => dropTargets.forEach((t) => setOver(t, false));
 
-      e.preventDefault();
-    };
+  const createGhostFrom = (el, rect) => {
+    const ghost = el.cloneNode(true);
+    ghost.classList.add("drag-ghost");
+    ghost.style.position = "fixed";
+    ghost.style.left = `${rect.left}px`;
+    ghost.style.top = `${rect.top}px`;
+    ghost.style.width = `${rect.width}px`;
+    ghost.style.zIndex = "9999";
+    ghost.style.pointerEvents = "none";
+    document.body.appendChild(ghost);
+    return ghost;
+  };
 
-    const onTouchEnd = (e) => {
-      if (!touchDragEl) return;
+  const onTouchStart = (e) => {
+    const el = e.currentTarget;
+    touchDragEl = el;
 
-      clearOver();
+    const t = e.touches[0];
+    const rect = el.getBoundingClientRect();
 
-      const t = e.changedTouches[0];
-      const under = document.elementFromPoint(t.clientX, t.clientY);
-      const zoneEl = under?.closest?.("[data-zone]");
-      const zone = zoneEl?.dataset?.zone || "pool";
+    offsetX = t.clientX - rect.left;
+    offsetY = t.clientY - rect.top;
 
-      // vissza normál állapotba
-      touchDragEl.classList.remove("dragging");
-      touchDragEl.style.position = "";
-      touchDragEl.style.left = "";
-      touchDragEl.style.top = "";
-      touchDragEl.style.width = "";
-      touchDragEl.style.zIndex = "";
-      touchDragEl.style.pointerEvents = "";
+    lastTouchY = t.clientY;
 
-      document.body.classList.remove("dragging-touch");
+    document.body.classList.add("dragging-touch");
+    ghostEl = createGhostFrom(el, rect);
 
-      moveItemToZone(zone, touchDragEl);
+    el.classList.add("drag-source");
+    el.style.opacity = "0.25";
 
-      touchDragEl = null;
-      e.preventDefault();
-    };
+    e.preventDefault();
+  };
 
-    appEl.querySelectorAll(".item").forEach((el) => {
-      el.addEventListener("touchstart", onTouchStart, { passive: false });
-      el.addEventListener("touchmove", onTouchMove, { passive: false });
-      el.addEventListener("touchend", onTouchEnd, { passive: false });
-      el.addEventListener("touchcancel", onTouchEnd, { passive: false });
-    });
-  }
+  const onTouchMove = (e) => {
+    if (!touchDragEl || !ghostEl) return;
+    const t = e.touches[0];
+
+    lastTouchY = t.clientY;
+    startAutoScroll();
+
+    ghostEl.style.left = `${t.clientX - offsetX}px`;
+    ghostEl.style.top = `${t.clientY - offsetY}px`;
+
+    clearOver();
+
+    ghostEl.style.display = "none";
+    const dropTarget = document.elementFromPoint(t.clientX, t.clientY);
+    ghostEl.style.display = "";
+
+    const zoneEl = dropTarget?.closest?.("[data-zone]");
+    if (zoneEl) setOver(zoneEl, true);
+
+    e.preventDefault();
+  };
+
+  const onTouchEnd = (e) => {
+    stopAutoScroll();
+    if (!touchDragEl) return;
+
+    clearOver();
+
+    const t = e.changedTouches[0];
+
+    if (ghostEl) ghostEl.style.display = "none";
+    const dropTarget = document.elementFromPoint(t.clientX, t.clientY);
+    if (ghostEl) ghostEl.style.display = "";
+
+    const zoneEl = dropTarget?.closest?.("[data-zone]");
+    const zone = zoneEl?.dataset?.zone || "pool";
+
+    if (ghostEl) {
+      ghostEl.remove();
+      ghostEl = null;
+    }
+
+    touchDragEl.classList.remove("drag-source");
+    touchDragEl.style.opacity = "";
+
+    document.body.classList.remove("dragging-touch");
+
+    moveItemToZone(zone, touchDragEl);
+
+    touchDragEl = null;
+    e.preventDefault();
+  };
+
+  appEl.querySelectorAll(".item").forEach((el) => {
+    el.addEventListener("touchstart", onTouchStart, { passive: false });
+    el.addEventListener("touchmove", onTouchMove, { passive: false });
+    el.addEventListener("touchend", onTouchEnd, { passive: false });
+    el.addEventListener("touchcancel", onTouchEnd, { passive: false });
+  });
+}
 
   // Mentett válaszok visszatöltése ('Vissza' gomb)
   restoreSavedResponse();
@@ -787,9 +852,10 @@ function renderResult() {
         </div>
       </div>
 
-      <div class="result-actions">
-        <button class="btn btn-large" id="restartBtn" type="button"></button>
-      </div>
+    <div class="result-actions">
+      <button class="btn secondary btn-large" id="downloadBtn" type="button"></button>
+      <button class="btn btn-large" id="restartBtn" type="button"></button>
+    </div>
 
       <div id="descSlot"></div>
     </section>
@@ -798,6 +864,7 @@ function renderResult() {
   // 3) statikus feliratok (textContent)
   document.getElementById("resultTitle").textContent = "Eredmény";
   document.getElementById("uniqueColorLabel").textContent = "Egyedi szín:";
+  document.getElementById("downloadBtn").textContent = "Letöltés";
   document.getElementById("restartBtn").textContent = "Újraindítás";
 
   // 4) Donut + százalékok
@@ -841,6 +908,162 @@ function renderResult() {
   document.getElementById("descSlot").innerHTML =
     buildPersonalityDescriptionHtml(evalRes, state.scores);
   enhanceEvaluationCards(document.getElementById("descSlot"));
+
+/* // 6.5) Eredmény letöltése (TXT export a DOM-ból)
+const downloadBtn = document.getElementById("downloadBtn");
+downloadBtn?.addEventListener("click", () => {
+  const hex = document.getElementById("hexLabel")?.textContent?.trim() || "";
+  const redLine = document.getElementById("redLine")?.textContent?.trim() || "";
+  const greenLine = document.getElementById("greenLine")?.textContent?.trim() || "";
+  const blueLine = document.getElementById("blueLine")?.textContent?.trim() || "";
+
+  // A kiértékelés szövege: azt mentsük, amit a user lát (DOM -> innerText)
+  const descText =
+    document.getElementById("descSlot")?.innerText?.trim() ||
+    "(Nincs kiértékelés szöveg.)";
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+
+  const content =
+    [
+      "RGB-Személyiségteszt – Eredmény",
+      `Dátum: ${yyyy}-${mm}-${dd}`,
+      "",
+      `Egyedi színkód: ${hex}`,
+      redLine,
+      greenLine,
+      blueLine,
+      "",
+      "Kiértékelés:",
+      "------------------------------",
+      descText,
+      "",
+    ].join("\n");
+
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `rgb-teszt-eredmeny-${yyyy}-${mm}-${dd}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // memória felszabadítás
+  URL.revokeObjectURL(url);
+}); */
+
+// 6.5) Eredmény letöltése (TXT export a DOM-ból)
+const downloadBtn = document.getElementById("downloadBtn");
+downloadBtn?.addEventListener("click", () => {
+  const hex = document.getElementById("hexLabel")?.textContent?.trim() || "";
+  const redLine = document.getElementById("redLine")?.textContent?.trim() || "";
+  const greenLine = document.getElementById("greenLine")?.textContent?.trim() || "";
+  const blueLine = document.getElementById("blueLine")?.textContent?.trim() || "";
+
+  // a flip-kártyák B oldala is bele kerül a txt-be
+  function normalizeExportText(s) {
+    return String(s)
+      .replace(/\r/g, "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  }
+
+  function extractEvaluationTextForExport() {
+    const host = document.getElementById("descSlot");
+    if (!host) return "(Nincs kiértékelés szöveg.)";
+
+    const clone = host.cloneNode(true);
+
+    // "Kattints a részletekért" eltávolítása exportnál
+    clone.querySelectorAll(".flip-front-hint").forEach((n) => n.remove());
+
+    // Flip kártyák kigyűjtése (front + back)
+    const cards = Array.from(clone.querySelectorAll(".flip-card"));
+    const cardBlocks = cards
+      .map((card) => {
+        const front = card.querySelector(".flip-front");
+        const back = card.querySelector(".flip-back");
+
+        const title =
+          normalizeExportText(front?.querySelector(".flip-front-title")?.textContent || "") ||
+          normalizeExportText(front?.textContent || "");
+
+        // B oldal: HTML-ből sima szöveg
+        const backText = normalizeExportText(back?.textContent || "");
+
+        // ha nincs B oldal szöveg a DOM-ban, akkor nem teszünk üres blokkot
+        if (!title && !backText) return "";
+
+        return [
+          title ? `• ${title}` : "• Részletek",
+          backText || "(Nincs részletező szöveg a kártya B oldalán.)",
+        ].join("\n");
+      })
+      .filter(Boolean);
+
+    // Flip-kártyákat kivesszük, hogy ne legyen duplikáció
+    cards.forEach((c) => c.remove());
+
+    // A maradék kiértékelés szöveg (pl. összegzés) – textContent: a rejtett részeket is tartalmazza
+    const restText = normalizeExportText(clone.textContent);
+
+    // Összerakás
+    const parts = [];
+    if (restText) parts.push(restText);
+
+    if (cardBlocks.length) {
+      parts.push(
+        "Részletek (fordítható kártyák):\n------------------------------\n" +
+          cardBlocks.join("\n\n")
+      );
+    }
+
+    return parts.length ? normalizeExportText(parts.join("\n\n")) : "(Nincs kiértékelés szöveg.)";
+  }
+
+  // A kiértékelés szövege: tartalmazza a flip-kártyák B oldalát is
+  const descText = extractEvaluationTextForExport();
+
+  const now = new Date();
+  const yyyy = now.getFullYear();
+  const mm = String(now.getMonth() + 1).padStart(2, "0");
+  const dd = String(now.getDate()).padStart(2, "0");
+
+  const content =
+    [
+      "RGB-Személyiségteszt – Eredmény",
+      `Dátum: ${yyyy}-${mm}-${dd}`,
+      "",
+      `Egyedi színkód: ${hex}`,
+      redLine,
+      greenLine,
+      blueLine,
+      "",
+      "Kiértékelés:",
+      "------------------------------",
+      descText,
+      "",
+    ].join("\n");
+
+  const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `rgb-teszt-eredmeny-${yyyy}-${mm}-${dd}.txt`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+
+  // memória felszabadítás
+  URL.revokeObjectURL(url);
+});
 
   // 7) Újraindítás
   document.getElementById("restartBtn").addEventListener("click", () => {
